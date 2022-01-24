@@ -1,3 +1,5 @@
+const path = require("path");
+
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -15,7 +17,38 @@ const cors = require("cors");
   or you can use a session store like `connect-session-knex`.
  */
 
+const session = require("express-session");
+const Store = require("connect-session-knex")(session);
 const server = express();
+const usersRouter = require("./users/users-router");
+const authRouter = require("./auth/auth-router");
+
+server.use(express.static(path.join(__dirname, "../client")));
+server.use(express.json());
+server.use(
+  session({
+    name: "chocolatechip",
+    secret: process.env.SECRET || "keep it secret",
+    cookie: {
+      maxAge: 1000 * 60 * 60,
+      secure: false, // if true, only works on HTTPS
+      httpOnly: false, // if true, javascript can't read cookie
+    },
+    rolling: true,
+    resave: false, // ignore it
+    saveUninitialized: false, // if true, server would always save the session
+    store: new Store({
+      knex: require("../database/db-config"),
+      tablename: "sessions",
+      sidfieldname: "sid",
+      createtable: true,
+      clearInterval: 1000 * 60 * 60,
+    }),
+  })
+);
+
+server.use("/api/users", usersRouter);
+server.use("/api/auth", authRouter);
 
 server.use(helmet());
 server.use(express.json());
@@ -25,7 +58,8 @@ server.get("/", (req, res) => {
   res.json({ api: "up" });
 });
 
-server.use((err, req, res, next) => { // eslint-disable-line
+server.use((err, req, res, next) => {
+  // eslint-disable-line
   res.status(err.status || 500).json({
     message: err.message,
     stack: err.stack,
